@@ -30,15 +30,11 @@ const updateFullName = async (req, res) => {
 };
 
 const updatePassword = async (req, res) => {
-  const { oldPassword, newPassword, confirmPassword } = req.body;
+  const { oldPassword, newPassword } = req.body;
   const { id } = req.user;
 
-  if (!oldPassword || !newPassword || !confirmPassword) {
+  if (!oldPassword || !newPassword) {
     throw ApiError.badRequest('All fields are required');
-  }
-
-  if (newPassword !== confirmPassword) {
-    throw ApiError.badRequest('Passwords do not match');
   }
 
   if (!id) {

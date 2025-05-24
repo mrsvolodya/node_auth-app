@@ -56,10 +56,6 @@ const activate = async (req, res) => {
     return res.sendStatus(404);
   }
 
-  if (!user.activationToken) {
-    return ApiError.badRequest('User is already activated');
-  }
-
   user.activationToken = null;
   await user.save();
 
