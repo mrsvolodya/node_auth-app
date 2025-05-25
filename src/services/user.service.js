@@ -18,23 +18,34 @@ async function getExistingUserById(id) {
   return user;
 }
 
-async function registration(firstName, lastName, email, password) {
-  const activationToken = uuidv4();
+async function registration(
+  firstName,
+  lastName,
+  email,
+  password,
+  skipActivation = false,
+) {
+  const existingUser = await findByEmail(email);
 
-  const isExistUser = await findByEmail(email);
-
-  if (isExistUser) {
+  if (existingUser) {
     throw ApiError.badRequest('User already exists!');
   }
 
-  await User.create({
+  const activationToken = skipActivation ? null : uuidv4();
+
+  const user = await User.create({
     firstName,
     lastName,
     email,
     password,
     activationToken,
   });
-  await emailService.sendActivationEmail(email, activationToken);
+
+  if (!skipActivation) {
+    await emailService.sendActivationEmail(email, activationToken);
+  }
+
+  return user;
 }
 
 async function updateFullName(id, firstName, lastName) {

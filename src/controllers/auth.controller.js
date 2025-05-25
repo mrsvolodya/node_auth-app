@@ -1,4 +1,7 @@
+/* eslint-disable no-console */
 import bcrypt from 'bcrypt';
+import { OAuth2Client } from 'google-auth-library';
+import { nanoid } from 'nanoid';
 import { Op } from 'sequelize';
 import { ApiError } from '../exceptions/api.error.js';
 import { ResetToken } from '../models/resetToken.js';
@@ -10,6 +13,7 @@ import { userService } from '../services/user.service.js';
 import { generateTokens } from '../utils/generateTokens.js';
 
 const EMAIL_PATTERN = /^[\w.+-]+@([\w-]+\.){1,3}[\w-]{2,}$/;
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 function validateEmail(value) {
   if (!value) {
@@ -123,51 +127,34 @@ const refresh = async (req, res) => {
 const requestReset = async (req, res) => {
   const { email } = req.body;
 
-  // Validate email
   const emailError = validateEmail(email);
 
   if (emailError) {
     throw ApiError.badRequest(emailError);
   }
 
-  // Find user by email
   const user = await userService.findByEmail(email);
 
-  // Don't reveal if user exists or not for security reasons
   if (!user) {
     return res.send({
       message: 'Password reset link sent if account exists',
     });
   }
 
-  // Generate a reset token using Node.js built-in crypto
-  const resetToken = Array.from(
-    new Uint8Array(
-      await crypto.subtle.digest(
-        'SHA-256',
-        crypto.getRandomValues(new Uint8Array(32)),
-      ),
-    ),
-  )
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  // 1 hour from now
+  const resetToken = nanoid(32);
+
   const expiresAt = new Date(Date.now() + 3600000);
 
-  // Remove any existing reset tokens for this user
   await ResetToken.destroy({ where: { userId: user.id } });
 
-  // Create new reset token
   await ResetToken.create({
     resetToken: resetToken,
     expiresAt,
     userId: user.id,
   });
 
-  // Send the reset email
   await emailService.sendEmailChangeConfirmation(user.email, resetToken);
 
-  // Return success message
   return res.send({
     message: 'Password reset link sent if account exists',
   });
@@ -177,14 +164,12 @@ const resetPassword = async (req, res) => {
   const { resetToken } = req.params;
   const { password } = req.body;
 
-  // Validate password
   const passwordError = validatePassword(password);
 
   if (passwordError) {
     throw ApiError.badRequest(passwordError);
   }
 
-  // Find user by reset token and check if token is expired
   const resetTokenRecord = await ResetToken.findOne({
     where: {
       resetToken,
@@ -202,10 +187,8 @@ const resetPassword = async (req, res) => {
 
   const user = resetTokenRecord.user;
 
-  // Hash the new password
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Update user's password and clear reset token fields
   user.password = hashedPassword;
   resetTokenRecord.resetToken = null;
   resetTokenRecord.resetTokenExpiry = null;
@@ -216,6 +199,50 @@ const resetPassword = async (req, res) => {
   return res.send({ message: 'Password has been reset successfully' });
 };
 
+const googleSignIn = async (req, res) => {
+  const { credential } = req.body;
+
+  if (!credential) {
+    throw ApiError.badRequest('Google credential is required');
+  }
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+
+    if (!payload || !payload.email) {
+      throw ApiError.badRequest('Invalid Google credential');
+    }
+
+    let user = await userService.findByEmail(payload.email);
+
+    if (!user) {
+      const firstName = payload.given_name || '';
+      const lastName = payload.family_name || '';
+      const email = payload.email;
+
+      const randomPassword = nanoid(32);
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+      user = await userService.registration(
+        firstName,
+        lastName,
+        email,
+        hashedPassword,
+        true,
+      );
+    }
+
+    await generateTokens(res, user);
+  } catch (error) {
+    throw ApiError.badRequest('Failed to authenticate with Google');
+  }
+};
+
 export const authController = {
   registration,
   activate,
@@ -224,4 +251,5 @@ export const authController = {
   refresh,
   requestReset,
   resetPassword,
+  googleSignIn,
 };
