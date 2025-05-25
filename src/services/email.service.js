@@ -46,12 +46,17 @@ function sendEmailChangeNotification(oldEmail, newEmail) {
   });
 }
 
-function sendEmailChangeConfirmation(email, token) {
-  const href = `${process.env.CLIENT_HOST}/users/me/confirm-email-change/${token}`;
+function sendEmailChangeConfirmation(email, resetToken) {
+  const href = `${process.env.CLIENT_HOST}/reset-password/${resetToken}`;
   const html = `
-  <h1>Confirm email change</h1>
-  <a href="${href}">${href}</a>
-  `;
+      <div>
+        <h1>Reset your password</h1>
+        <p>Please click the link below to reset your password:</p>
+        <a href="${href}">Reset Password</a>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you did not request this reset, please ignore this email.</p>
+      </div>
+    `;
 
   return send({
     email,

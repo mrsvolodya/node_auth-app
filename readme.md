@@ -11,16 +11,16 @@ Implement an application that allows user to:
   + Redirect to profile after login
 + Logout (only authenticated)
   + Redirect to login after logging out
-- Password reset (only non authenticated)
-  - Ask for an email
-  - Show email sent page
-  - add Reset Password confirmation page (with `password` and `confirmation` fields that must be equal)
-  - Show Success page with a link to login
-- Profile page (only authenticated)
++ Password reset (only non authenticated)
+  + Ask for an email
+  + Show email sent page
+  + add Reset Password confirmation page (with `password` and `confirmation` fields that must be equal)
+  + Show Success page with a link to login
++ Profile page (only authenticated)
   + You can change a name
   + It allows to change a password (require an old one, `new password` and `confirmation`)
   + To change an email you should type the password, confirm the new email and notify the old email about the change
-- 404 for all the other pages
++ 404 for all the other pages
 
 ## (Optional) Advanced tasks
 - Implement Sign-up with Google, Facebook, Github (use Passport.js lib)
