@@ -27,11 +27,17 @@ async function registration(
 ) {
   const existingUser = await findByEmail(email);
 
-  if (existingUser) {
+  if (existingUser && !existingUser.activationToken) {
     throw ApiError.badRequest('User already exists!');
   }
 
   const activationToken = skipActivation ? null : uuidv4();
+
+  if (existingUser && existingUser.activationToken) {
+    await emailService.sendActivationEmail(email, existingUser.activationToken);
+
+    return;
+  }
 
   const user = await User.create({
     firstName,

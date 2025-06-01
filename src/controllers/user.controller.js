@@ -8,6 +8,7 @@ import { generateTokens } from '../utils/generateTokens.js';
 
 const updateFullName = async (req, res) => {
   const { firstName, lastName } = req.body;
+
   const { id } = req.user;
 
   if (!firstName || !lastName) {

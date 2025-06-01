@@ -1,4 +1,5 @@
 /* eslint-disable no-console */
+import axios from 'axios';
 import bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
 import { nanoid } from 'nanoid';
@@ -35,7 +36,7 @@ function validatePassword(value) {
   }
 }
 
-const registration = async (req, res, next) => {
+const registration = async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
 
   const errors = {
@@ -107,6 +108,7 @@ const logout = async (req, res) => {
 
 const refresh = async (req, res) => {
   const { refreshToken } = req.cookies;
+
   const userData = await jwtService.verifyRefresh(refreshToken);
 
   const token = await tokenService.getByToken(refreshToken);
@@ -124,7 +126,7 @@ const refresh = async (req, res) => {
   generateTokens(res, user);
 };
 
-const requestReset = async (req, res) => {
+const requestPasswordReset = async (req, res) => {
   const { email } = req.body;
 
   const emailError = validateEmail(email);
@@ -160,7 +162,7 @@ const requestReset = async (req, res) => {
   });
 };
 
-const resetPassword = async (req, res) => {
+const confirmPasswordReset = async (req, res) => {
   const { resetToken } = req.params;
   const { password } = req.body;
 
@@ -243,13 +245,100 @@ const googleSignIn = async (req, res) => {
   }
 };
 
+const githubSignIn = async (req, res) => {
+  const { code } = req.body;
+
+  if (!code) {
+    throw ApiError.badRequest('Git Hub credential is required');
+  }
+
+  try {
+    const tokenResponse = await axios.post(
+      'https://github.com/login/oauth/access_token',
+      {
+        client_id: process.env.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET,
+        code,
+      },
+      {
+        headers: {
+          Accept: 'application/json',
+        },
+      },
+    );
+
+    const { access_token: accessToken } = tokenResponse.data;
+
+    if (!accessToken) {
+      throw ApiError.unauthorized('GitHub token exchange failed');
+    }
+
+    const userResponse = await axios.get('https://api.github.com/user', {
+      headers: {
+        Authorization: `token ${accessToken}`,
+      },
+    });
+
+    const emailResponse = await axios.get(
+      'https://api.github.com/user/emails',
+      {
+        headers: {
+          Authorization: `token ${accessToken}`,
+        },
+      },
+    );
+
+    console.log({ accessToken, userResponse, emailResponse });
+
+    const githubUser = userResponse.data;
+
+    const primaryEmail = emailResponse.data.find(
+      (e) => e.primary && e.verified,
+    )?.email;
+
+    let user = await userService.findByEmail(primaryEmail);
+
+    if (!user) {
+      const [firstName, ...lastArr] = (
+        githubUser.name ||
+        githubUser.login ||
+        'GitHubUser'
+      ).split(' ');
+
+      const lastName = lastArr.join(' ') || '';
+      // const hashedPassword = await bcrypt.hash(nanoid(32), 10);
+
+      // console.log('USER RESPONSE', {
+      //   firstName,
+      //   lastName,
+      //   hashedPassword,
+      //   lastArr,
+      // });
+
+      user = await userService.registration(firstName, lastName);
+    }
+
+    if (!primaryEmail) {
+      throw ApiError.badRequest(
+        'GitHub account must have a verified primary email',
+      );
+    }
+  } catch (error) {
+    console.error(
+      'GitHub sign is error:',
+      error.response?.data || error.message,
+    );
+  }
+};
+
 export const authController = {
   registration,
   activate,
   login,
   logout,
   refresh,
-  requestReset,
-  resetPassword,
+  requestPasswordReset,
+  confirmPasswordReset,
   googleSignIn,
+  githubSignIn,
 };
